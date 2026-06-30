@@ -1,13 +1,11 @@
 name: publish-npm
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to publish manually (example: v1.2.3). Optional.'
-        required: false
+        description: 'Tag/version to publish manually (example: v1.2.3, 1.2.3, or fetch-to-go-v1.2.3).'
+        required: true
         type: string
 
 permissions:
@@ -18,20 +16,50 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve ref to publish
-        id: resolve_ref
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
-            echo "ref=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            echo "ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.resolve_ref.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve and checkout release tag
+        id: resolve_ref
+        shell: bash
+        run: |
+          set -e
+
+          raw_tag='${{ inputs.tag }}'
+
+          pkg_name=$(node -p "require('./package.json').name")
+          git fetch --tags --force
+
+          candidates="$raw_tag"
+          case "$raw_tag" in
+            v*)
+              semver_tag="${raw_tag#v}"
+              candidates="$candidates\n$semver_tag\n${pkg_name}-$raw_tag\n${pkg_name}-$semver_tag"
+              ;;
+            *)
+              candidates="$candidates\nv$raw_tag\n${pkg_name}-$raw_tag\n${pkg_name}-v$raw_tag"
+              ;;
+          esac
+
+          resolved=''
+          for tag in $(printf '%b\n' "$candidates"); do
+            [ -z "$tag" ] && continue
+            if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+              resolved="$tag"
+              break
+            fi
+          done
+
+          if [ -z "$resolved" ]; then
+            echo "Could not find a matching tag for input '$raw_tag'."
+            echo "Available recent tags:"
+            git tag --sort=-creatordate | head -n 15
+            exit 1
+          fi
+
+          echo "ref=$resolved" >> "$GITHUB_OUTPUT"
+          git checkout "tags/$resolved"
 
       - uses: actions/setup-node@v4
         with:
@@ -41,8 +69,7 @@ jobs:
       - name: Read package metadata
         id: package
         run: |
-          echo "name=$(node -p \"require('./package.json').name\")" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          node -e "const fs = require('fs'); const pkg = require('./package.json'); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'name=' + pkg.name + '\nversion=' + pkg.version + '\n');"
 
       - name: Check if version already exists on npm
         id: npm_check
