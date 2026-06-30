@@ -4,21 +4,21 @@ export const ok = <T>(data: T): Result<T, never> => ({ ok: true, data });
 export const fail = <E>(err: E): Result<never, E> => ({ ok: false, err });
 
 export const HttpFailures = {
-  // Erros de Cliente (4xx)
-  BAD_REQUEST: (msg = 'Requisição inválida') => fail({ code: 'BAD_REQUEST', status: 400, message: msg } as const),
-  UNAUTHORIZED: fail({ code: 'UNAUTHORIZED', status: 401, message: 'Não autorizado' } as const),
-  FORBIDDEN: fail({ code: 'FORBIDDEN', status: 403, message: 'Acesso negado' } as const),
-  NOT_FOUND: fail({ code: 'NOT_FOUND', status: 404, message: 'Recurso não encontrado' } as const),
-  VALIDATION: (details: any) => fail({ code: 'VALIDATION', status: 422, message: 'Erro de validação', data: details } as const),
+  // Client Errors (4xx)
+  BAD_REQUEST: (msg = 'Invalid request') => fail({ code: 'BAD_REQUEST', status: 400, message: msg } as const),
+  UNAUTHORIZED: fail({ code: 'UNAUTHORIZED', status: 401, message: 'Unauthorized' } as const),
+  FORBIDDEN: fail({ code: 'FORBIDDEN', status: 403, message: 'Access denied' } as const),
+  NOT_FOUND: fail({ code: 'NOT_FOUND', status: 404, message: 'Resource not found' } as const),
+  VALIDATION: (details: any) => fail({ code: 'VALIDATION', status: 422, message: 'Validation error', data: details } as const),
 
-  // Erros de Servidor (5xx)
-  INTERNAL_SERVER: fail({ code: 'INTERNAL_SERVER', status: 500, message: 'Erro interno do servidor' } as const),
+  // Server Errors (5xx)
+  INTERNAL_SERVER: fail({ code: 'INTERNAL_SERVER', status: 500, message: 'Internal server error' } as const),
 
-  // Erro de Infra/Rede (Status 0)
-  NETWORK: fail({ code: 'NETWORK', status: 0, message: 'Erro de conexão' } as const),
+  // Infra/Network Error (Status 0)
+  NETWORK: fail({ code: 'NETWORK', status: 0, message: 'Connection error' } as const),
 } as const;
 
-// Helper para sucesso sem corpo (204 No Content)
+// Helper for success without body (204 No Content)
 export const NO_CONTENT = ok(null);
 
 /**
@@ -31,7 +31,7 @@ export const mapStatusToFailure = (status: number, body?: any) => {
   if (status === 404) return HttpFailures.NOT_FOUND;
   if (status === 422) return HttpFailures.VALIDATION(body?.errors);
   if (status >= 500 && status <= 599) return HttpFailures.INTERNAL_SERVER;
-  return fail({ code: 'UNKNOWN', status, message: 'Erro desconhecido', data: body } as const);
+  return fail({ code: 'UNKNOWN', status, message: 'Unknown error', data: body } as const);
 };
 
 export type TogoError = {
