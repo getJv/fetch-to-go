@@ -12,33 +12,34 @@ npm install fetch-to-go
 
 The library uses a `Result` type to ensure you always handle both success and error.
 
+### Standard HTTP Failures
+
+You can use predefined common HTTP failures:
+
 ```ts
-import { togo, createErrorMap, ExtractError } from 'fetch-to-go';
+import { HttpFailures, NO_CONTENT } from 'fetch-to-go';
 
-// 1. Define your error mappings
-const LOGIN_ERRORS = createErrorMap({
-    INVALID_CREDENTIALS: { code: 'AUTH_001', message: 'Invalid credentials' },
-    NETWORK_ERROR: { code: 'NET_000', message: 'Connection error' }
-} as const);
+// Predefined errors
+const err400 = HttpFailures.BAD_REQUEST('Custom message');
+const err401 = HttpFailures.UNAUTHORIZED;
+const err500 = HttpFailures.INTERNAL_SERVER;
 
-type LoginError = ExtractError<typeof LOGIN_ERRORS[keyof typeof LOGIN_ERRORS]>;
+// Predefined success
+const success204 = NO_CONTENT;
+```
 
-// 2. Use 'togo' to wrap your fetch
-async function doLogin(credentials: any) {
-    const result = await togo<{ token: string }>(
-        fetch('/api/login', {
-            method: 'POST',
-            body: JSON.stringify(credentials)
-        })
-    );
+### Auto Mapping Status
 
-    if (!result.ok) {
-        // Handle API or Network errors here
-        if (result.err.status === 401) return LOGIN_ERRORS.INVALID_CREDENTIALS;
-        return LOGIN_ERRORS.NETWORK_ERROR;
-    }
+Use `mapStatusToFailure` to automatically convert HTTP status codes to standard errors.
 
-    return result; // result.data contains { token: string }
+```ts
+import { mapStatusToFailure, togo } from 'fetch-to-go';
+
+const result = await togo(fetch('/api/data'));
+
+if (!result.ok) {
+    // Automatically maps 400, 401, 403, 404, 422, 5xx to standard failures
+    return mapStatusToFailure(result.err.status, result.err.data);
 }
 ```
 
@@ -83,6 +84,31 @@ const [res1, res2] = await Promise.all([
 
 if (res1.ok) console.log(res1.data);
 if (res2.ok) console.log(res2.data);
+```
+
+### Advanced Usage
+
+#### Custom Failures combined with Standard ones
+
+```ts
+import { HttpFailures, fail, ExtractError, Result, togo, mapStatusToFailure } from 'fetch-to-go';
+
+const LOGIN_FAILURES = {
+    ...HttpFailures,
+    INVALID_CREDENTIALS: fail({ code: 'AUTH_001', status: 401, message: 'Invalid credentials' } as const)
+} as const;
+
+type LoginError = ExtractError<typeof LOGIN_FAILURES[keyof typeof LOGIN_FAILURES]>;
+
+async function doLogin(credentials: any): Promise<Result<any, LoginError>> {
+    const result = await togo(fetch('/api/login', { method: 'POST', body: JSON.stringify(credentials) }));
+
+    if (result.ok) return result;
+
+    if (result.err.status === 401) return LOGIN_FAILURES.INVALID_CREDENTIALS;
+    
+    return mapStatusToFailure(result.err.status, result.err.data);
+}
 ```
 
 ### Advanced Pattern Matching (with ts-pattern)

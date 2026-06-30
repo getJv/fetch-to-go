@@ -1,5 +1,5 @@
 import { createServer, Server } from 'http';
-import { togo, createErrorMap, ExtractError } from '../src/index';
+import { togo, createErrorMap, ExtractError, HttpFailures, mapStatusToFailure, NO_CONTENT } from '../src';
 
 describe('fetch-to-go', () => {
   let server: Server;
@@ -100,5 +100,69 @@ describe('fetch-to-go', () => {
       expect(result.err.status).toBe(0);
       expect(result.err.message).toBe('Network error');
     }
+  });
+
+  describe('HttpFailures and mapping', () => {
+    it('should have standard HttpFailures', () => {
+      const br = HttpFailures.BAD_REQUEST();
+      if (!br.ok) expect(br.err.status).toBe(400);
+
+      const un = HttpFailures.UNAUTHORIZED;
+      if (!un.ok) expect(un.err.status).toBe(401);
+
+      const fb = HttpFailures.FORBIDDEN;
+      if (!fb.ok) expect(fb.err.status).toBe(403);
+
+      const nf = HttpFailures.NOT_FOUND;
+      if (!nf.ok) expect(nf.err.status).toBe(404);
+
+      const vl = HttpFailures.VALIDATION({});
+      if (!vl.ok) expect(vl.err.status).toBe(422);
+
+      const is = HttpFailures.INTERNAL_SERVER;
+      if (!is.ok) expect(is.err.status).toBe(500);
+
+      const nw = HttpFailures.NETWORK;
+      if (!nw.ok) expect(nw.err.status).toBe(0);
+    });
+
+    it('should have NO_CONTENT helper', () => {
+      expect(NO_CONTENT.ok).toBe(true);
+      if (NO_CONTENT.ok) expect(NO_CONTENT.data).toBe(null);
+    });
+
+    it('should map status to failure correctly', () => {
+      const res400 = mapStatusToFailure(400);
+      if (!res400.ok) expect(res400.err.code).toBe('BAD_REQUEST');
+
+      const res401 = mapStatusToFailure(401);
+      if (!res401.ok) expect(res401.err.code).toBe('UNAUTHORIZED');
+
+      const res403 = mapStatusToFailure(403);
+      if (!res403.ok) expect(res403.err.code).toBe('FORBIDDEN');
+
+      const res404 = mapStatusToFailure(404);
+      if (!res404.ok) expect(res404.err.code).toBe('NOT_FOUND');
+
+      const res422 = mapStatusToFailure(422);
+      if (!res422.ok) expect(res422.err.code).toBe('VALIDATION');
+
+      const res500 = mapStatusToFailure(500);
+      if (!res500.ok) expect(res500.err.code).toBe('INTERNAL_SERVER');
+
+      const res503 = mapStatusToFailure(503);
+      if (!res503.ok) expect(res503.err.code).toBe('INTERNAL_SERVER');
+
+      const res999 = mapStatusToFailure(999);
+      if (!res999.ok) expect(res999.err.code).toBe('UNKNOWN');
+    });
+
+    it('should preserve message and data in mapStatusToFailure', () => {
+       const res = mapStatusToFailure(400, { message: 'Custom' });
+       if (!res.ok) expect((res.err as any).message).toBe('Custom');
+
+       const res2 = mapStatusToFailure(422, { errors: { field: 'required' } });
+       if (!res2.ok) expect((res2.err as any).data).toEqual({ field: 'required' });
+    });
   });
 });
